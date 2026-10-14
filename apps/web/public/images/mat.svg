@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 360">
+  <defs><linearGradient id="mat" x2=".8" y2="1"><stop stop-color="#6c805c"/><stop offset="1" stop-color="#41563b"/></linearGradient><pattern id="texture" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M0 1h5" stroke="#ffffff" stroke-opacity=".07"/></pattern></defs>
+  <ellipse cx="203" cy="294" rx="128" ry="19" fill="#34492c" opacity=".1"/>
+  <g transform="rotate(-14 200 180)">
+    <path d="M106 92q0-22 22-22h154q22 0 22 22v181q0 23-23 23H128q-22 0-22-23z" fill="url(#mat)"/>
+    <path d="M106 92q0-22 22-22h154q22 0 22 22v181q0 23-23 23H128q-22 0-22-23z" fill="url(#texture)"/>
+    <path d="M120 108v161q0 14 14 14h141" fill="none" stroke="#a7b793" stroke-width="1" opacity=".5"/>
+    <rect x="105" y="63" width="199" height="57" rx="27" fill="#85956d"/>
+    <ellipse cx="280" cy="91" rx="24" ry="28" fill="#3a4e34"/>
+    <ellipse cx="280" cy="91" rx="17" ry="21" fill="none" stroke="#9dac84" stroke-width="3"/>
+    <ellipse cx="280" cy="91" rx="9" ry="13" fill="none" stroke="#9dac84" stroke-width="3"/>
+    <text x="139" y="259" fill="#d5e2b9" font-family="Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="2">KINETIC</text>
+  </g>
+</svg>

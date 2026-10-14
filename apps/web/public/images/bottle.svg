@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 360">
+  <defs><linearGradient id="b" x1="0" x2="1"><stop stop-color="#52797b"/><stop offset=".4" stop-color="#92b0ae"/><stop offset=".75" stop-color="#769b9b"/><stop offset="1" stop-color="#537c7e"/></linearGradient></defs>
+  <ellipse cx="205" cy="311" rx="84" ry="14" fill="#3b6063" opacity=".12"/>
+  <g transform="rotate(9 200 185)"><path d="M160 83h80v30q22 8 22 36v138q0 21-24 21h-76q-24 0-24-21V149q0-28 22-36z" fill="url(#b)"/>
+    <rect x="155" y="57" width="90" height="42" rx="10" fill="#345356"/><path d="M165 61v31m10-31v31m10-31v31m10-31v31m10-31v31m10-31v31m10-31v31m10-31v31" stroke="#547479" stroke-width="2"/>
+    <path d="M169 52v-9q0-18 18-18h26q18 0 18 18v9" stroke="#3c5c60" stroke-width="7" fill="none"/>
+    <path d="M151 156v119" stroke="#b8cfca" stroke-opacity=".5" stroke-width="4" stroke-linecap="round"/>
+    <text x="160" y="212" fill="#e6f0df" font-family="Arial,sans-serif" font-size="14" font-weight="800" letter-spacing="1">KINETIC</text><text x="178" y="233" fill="#e6f0df" font-family="Arial,sans-serif" font-size="7" letter-spacing="3">MOVE WELL</text>
+    <path d="M155 291h89" stroke="#3f696b" stroke-width="2"/>
+  </g>
+</svg>

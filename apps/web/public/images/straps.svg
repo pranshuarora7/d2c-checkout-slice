@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 360">
+  <ellipse cx="202" cy="300" rx="121" ry="16" fill="#463c32" opacity=".1"/>
+  <g transform="rotate(-24 172 179)">
+    <path d="M127 91h42v170q0 25 27 25h36v40h-39q-66 0-66-65z" fill="#5c564b"/>
+    <path d="M148 89c-42-6-68 4-68 42s27 57 71 40l-3-41c-17 7-29 5-29-2s13-8 29-5z" fill="#80796a"/>
+    <path d="M135 110v144q0 52 55 52h29" fill="none" stroke="#b2a793" stroke-width="2" stroke-dasharray="3 3"/>
+    <rect x="123" y="172" width="49" height="28" rx="2" fill="#c9bd9d"/><text x="129" y="190" fill="#3e3a32" font-family="Arial,sans-serif" font-size="8" font-weight="700">KINETIC</text>
+  </g>
+  <g transform="translate(93 -15) rotate(22 172 179)">
+    <path d="M127 91h42v145q0 25 27 25h24v40h-27q-66 0-66-65z" fill="#363d35"/>
+    <path d="M148 89c-42-6-68 4-68 42s27 57 71 40l-3-41c-17 7-29 5-29-2s13-8 29-5z" fill="#65715f"/>
+    <path d="M135 111v119q0 52 55 52h17" fill="none" stroke="#9ba48c" stroke-width="2" stroke-dasharray="3 3"/>
+    <rect x="123" y="172" width="49" height="28" rx="2" fill="#d5ddbc"/><text x="129" y="190" fill="#3e4937" font-family="Arial,sans-serif" font-size="8" font-weight="700">KINETIC</text>
+  </g>
+</svg>

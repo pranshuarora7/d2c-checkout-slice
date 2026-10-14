@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 360">
+  <defs><pattern id="weave" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M0 1h6M1 0v6" stroke="#fff" stroke-opacity=".12" stroke-width="1"/></pattern></defs>
+  <ellipse cx="210" cy="297" rx="123" ry="15" fill="#754b32" opacity=".1"/>
+  <g transform="rotate(-20 200 185)">
+    <rect x="82" y="87" width="215" height="70" rx="35" fill="#9e563f"/><rect x="108" y="105" width="164" height="25" rx="12" fill="#e9c4a3"/>
+    <path d="M85 129q4 28 34 28h143q31 0 34-28v31q-4 28-34 28H119q-30 0-34-28z" fill="#bc7154"/>
+    <rect x="100" y="165" width="215" height="70" rx="35" fill="#c58d62"/><rect x="126" y="183" width="164" height="25" rx="12" fill="#efdfc6"/>
+    <path d="M103 207q4 28 34 28h143q31 0 34-28v31q-4 28-34 28H137q-30 0-34-28z" fill="#dca87b"/>
+    <path d="M85 143h210v25H85zm18 78h210v26H103z" fill="url(#weave)"/>
+    <rect x="167" y="145" width="47" height="24" rx="2" fill="#f3debb"/><text x="172" y="160" font-family="Arial,sans-serif" font-size="8" fill="#5b3b2a" font-weight="700">KINETIC</text>
+  </g>
+</svg>
