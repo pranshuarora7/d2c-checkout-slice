@@ -1,0 +1,24 @@
+server:
+  address: 127.0.0.1
+  port: ${PORT:8080}
+spring:
+  application:
+    name: kinetic-checkout
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+      accept-float-as-int: false
+    mapper:
+      allow-coercion-of-scalars: false
+app:
+  database: ${CHECKOUT_DB:data/checkout.sqlite}
+  sample-database: sample/checkout-sample.sqlite
+  demo-token: demo-customer-1
+  webhook-secret: ${WEBHOOK_SECRET:local-demo-webhook-secret-not-for-production}
+  reservation-minutes: 15
+  expiry:
+    enabled: true
+    interval-ms: 10000
+logging:
+  level:
+    root: INFO
