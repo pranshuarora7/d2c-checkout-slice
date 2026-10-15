@@ -60,6 +60,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setCart(next);
       setError(null);
     } finally {
+      // Refreshes started during this update may still contain the previous cart.
+      ++revision.current;
       mutationInFlight.current = false;
       setUpdating(false);
       setLoading(false);
