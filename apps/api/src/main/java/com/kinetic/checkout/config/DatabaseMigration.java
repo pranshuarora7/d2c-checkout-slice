@@ -12,15 +12,16 @@ final class DatabaseMigration {
 
     static void upgrade(DataSource source) {
         var jdbc = new JdbcTemplate(source);
-        if (jdbc.queryForObject("PRAGMA user_version", Integer.class) >= 2) return;
+        if (jdbc.queryForObject("PRAGMA user_version", Integer.class) >= 3) return;
         new TransactionTemplate(new DataSourceTransactionManager(source))
                 .executeWithoutResult(
                         status -> {
-                            jdbc.execute(
-                                    "ALTER TABLE addresses ADD COLUMN active INTEGER NOT NULL"
-                                            + " DEFAULT 1 CHECK (active IN (0,1))");
-                            jdbc.execute(
-                                    """
+                            if (jdbc.queryForObject("PRAGMA user_version", Integer.class) < 2) {
+                                jdbc.execute(
+                                        "ALTER TABLE addresses ADD COLUMN active INTEGER NOT NULL"
+                                                + " DEFAULT 1 CHECK (active IN (0,1))");
+                                jdbc.execute(
+                                        """
 CREATE TABLE payment_attempts_v2 (
     event_id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES profiles(id),
@@ -32,13 +33,28 @@ CREATE TABLE payment_attempts_v2 (
     UNIQUE (user_id, retry_key)
 )
 """);
-                            jdbc.execute(
-                                    "INSERT INTO payment_attempts_v2 SELECT * FROM"
+                                jdbc.execute(
+                                        "INSERT INTO payment_attempts_v2 SELECT * FROM"
+                                                + " payment_attempts");
+                                jdbc.execute("DROP TABLE payment_attempts");
+                                jdbc.execute(
+                                        "ALTER TABLE payment_attempts_v2 RENAME TO"
                                             + " payment_attempts");
-                            jdbc.execute("DROP TABLE payment_attempts");
+                            }
                             jdbc.execute(
-                                    "ALTER TABLE payment_attempts_v2 RENAME TO payment_attempts");
-                            jdbc.execute("PRAGMA user_version = 2");
+                                    """
+CREATE TABLE payment_attempt_keys (
+    user_id TEXT NOT NULL REFERENCES profiles(id),
+    retry_key TEXT NOT NULL,
+    event_id TEXT NOT NULL REFERENCES payment_attempts(event_id),
+    PRIMARY KEY (user_id, retry_key)
+)
+""");
+                            jdbc.update(
+                                    "INSERT INTO payment_attempt_keys (user_id, retry_key,"
+                                        + " event_id) SELECT user_id, retry_key, event_id FROM"
+                                        + " payment_attempts");
+                            jdbc.execute("PRAGMA user_version = 3");
                         });
     }
 }
