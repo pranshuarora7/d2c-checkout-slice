@@ -72,6 +72,7 @@ class CheckoutFlowTest {
         for (String table :
                 List.of(
                         "webhook_events",
+                        "payment_attempt_keys",
                         "payment_attempts",
                         "payment_intents",
                         "order_items",
@@ -543,6 +544,81 @@ class CheckoutFlowTest {
         assertThat(count("webhook_events")).isZero();
         jdbc.execute("DROP TRIGGER reject_receipt");
         assertThat(signed(body).getBody().get("status").asText()).isEqualTo("confirmed");
+    }
+
+    @Test
+    void everyAcceptedPaymentKeyStaysBoundToItsOriginalRequest() {
+        String orderA = createOrder();
+        String originalKey = key();
+        String anotherKey = key();
+        assertThat(pay(USER, orderA, "failure", originalKey).getStatusCode().value())
+                .isEqualTo(200);
+        assertThat(pay(USER, orderA, "failure", anotherKey).getStatusCode().value()).isEqualTo(200);
+        assertThat(pay(USER, orderA, "failure", anotherKey).getStatusCode().value()).isEqualTo(200);
+        assertThat(pay(USER, orderA, "success", anotherKey).getBody().get("code").asText())
+                .isEqualTo("RETRY_KEY_REUSED");
+        assertThat(count("payment_attempts")).isEqualTo(1);
+        assertThat(count("payment_attempt_keys")).isEqualTo(2);
+        assertThat(count("webhook_events")).isEqualTo(1);
+        String orderB = createOrder();
+        for (String used : List.of(originalKey, anotherKey)) {
+            var reused = pay(USER, orderB, "failure", used);
+            assertThat(reused.getStatusCode().value()).isEqualTo(409);
+            assertThat(reused.getBody().get("code").asText()).isEqualTo("RETRY_KEY_REUSED");
+        }
+        assertThat(status(orderB)).isEqualTo("pending");
+        assertThat(pay(USER, orderB, "success", key()).getBody().get("status").asText())
+                .isEqualTo("confirmed");
+    }
+
+    @Test
+    void simultaneousFreshKeysReuseOneAttemptAndBindBothKeys() throws Exception {
+        String id = createOrder();
+        String first = key();
+        String second = key();
+        var responses =
+                race(() -> pay(USER, id, "pending", first), () -> pay(USER, id, "pending", second));
+        assertThat(responses.stream().map(r -> r.getStatusCode().value())).containsOnly(200);
+        assertThat(count("payment_attempts")).isEqualTo(1);
+        assertThat(count("payment_attempt_keys")).isEqualTo(2);
+        assertThat(count("webhook_events")).isZero();
+        assertThat(pay(USER, id, "success", key()).getStatusCode().value()).isEqualTo(409);
+        assertThat(count("payment_attempt_keys")).isEqualTo(2);
+    }
+
+    @Test
+    void differentShoppersCanUseTheSamePaymentKey() {
+        String sharedKey = key();
+        String firstOrder = createOrder();
+        quantity(OTHER, "TRAINING-MAT", 1);
+        String secondOrder = checkout(OTHER, "addr_other", key()).getBody().get("orderId").asText();
+        assertThat(pay(USER, firstOrder, "pending", sharedKey).getStatusCode().value())
+                .isEqualTo(200);
+        assertThat(pay(OTHER, secondOrder, "pending", sharedKey).getStatusCode().value())
+                .isEqualTo(200);
+        assertThat(count("payment_attempt_keys")).isEqualTo(2);
+    }
+
+    @Test
+    void newBrowserKeyCanRecoverPersistedAttemptAfterWebhookDeliveryFailure() {
+        String id = createOrder();
+        String originalKey = key();
+        jdbc.execute(
+                "CREATE TRIGGER reject_receipt BEFORE INSERT ON webhook_events BEGIN SELECT"
+                    + " RAISE(ABORT,'test failure'); END");
+        assertThat(pay(USER, id, "success", originalKey).getStatusCode().value()).isEqualTo(503);
+        assertThat(count("payment_attempts")).isEqualTo(1);
+        assertThat(status(id)).isEqualTo("pending");
+        assertThat(get("/api/orders/" + id, USER).getBody().get("paymentScenario").asText())
+                .isEqualTo("success");
+        jdbc.execute("DROP TRIGGER reject_receipt");
+        assertThat(pay(USER, id, "success", key()).getBody().get("status").asText())
+                .isEqualTo("confirmed");
+        assertThat(count("payment_attempts")).isEqualTo(1);
+        assertThat(count("webhook_events")).isEqualTo(1);
+        System.out.println(
+                "REVIEW: a fresh browser key currently recovers the saved attempt after delivery"
+                    + " failure.");
     }
 
     private ResponseEntity<JsonNode> get(String path, String token) {
