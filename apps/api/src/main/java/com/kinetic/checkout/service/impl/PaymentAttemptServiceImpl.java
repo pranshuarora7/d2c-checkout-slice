@@ -54,6 +54,9 @@ public class PaymentAttemptServiceImpl implements PaymentAttemptService {
                         "PAYMENT_ALREADY_STARTED",
                         "A different payment outcome has already been selected.");
             }
+            // A new browser session may retry an existing attempt with a fresh key.
+            // Bind it before returning so it cannot later start payment for another order.
+            payments.bindKey(byOrder.get(), key);
             return byOrder.get();
         }
         if (order.status() != Order.Status.PENDING || !order.expiresAt().isAfter(clock.instant())) {
