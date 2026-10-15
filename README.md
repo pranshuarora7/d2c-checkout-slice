@@ -65,7 +65,7 @@ apps/web/src/
 
 Controllers call service interfaces; implementations own transactions and use repositories. Repositories are concrete JDBC classes, without a generic base abstraction. Frontend tests sit beside their pages/client. Comments explain transaction boundaries and retry behavior where those choices matter.
 
-The sample database contains five products, one demo profile, two addresses and no orders. First run copies it to the ignored `apps/api/data/checkout.sqlite`; subsequent runs preserve your data. Missing sample files fall back to schema/seed SQL. To start another clean demo without replacing existing data, run `CHECKOUT_DB=data/fresh-demo.sqlite sh mvnw spring-boot:run` from `apps/api` after stopping the current API.
+The sample database contains five products, one demo profile, two addresses and no orders. First run copies it to the ignored `apps/api/data/checkout.sqlite`; subsequent runs preserve your data. Older databases upgrade automatically, keeping existing orders and their original payment keys. Missing sample files fall back to schema/seed SQL. To start another clean demo without replacing existing data, run `CHECKOUT_DB=data/fresh-demo.sqlite sh mvnw spring-boot:run` from `apps/api` after stopping the current API.
 
 ## Tests
 
@@ -79,7 +79,7 @@ npm run build
 npm run format:check
 ```
 
-Verified: **18 backend tests, 11 frontend tests, production build and formatting check**. Integration tests use temporary SQLite databases and actual HTTP requests, including the provider-to-webhook call. They cover ownership, strict input validation, retries, signatures, replay, amount mismatch, expiry, stock races and transaction rollback. One rollback test deliberately forces a database error and expects HTTP 503; its error log is intentional.
+Verified: **25 backend tests, 18 frontend tests, production build and formatting check**. Integration tests use temporary SQLite databases and actual HTTP requests, including the provider-to-webhook call. They cover ownership, strict input validation, retries, signatures, replay, amount mismatch, expiry, stock races and transaction rollback. Rollback and payment-recovery tests deliberately force database errors and expect HTTP 503; those error logs are intentional. Added regressions cover overlapping cart refreshes, lost checkout responses, payment key reuse and upgrades of existing databases.
 
 ### Demonstrate the stock race
 
@@ -95,7 +95,7 @@ The test prints four steps: both buyers add the last unit without reserving it; 
 
 ### Three tradeoffs I chose
 
-1. **Reuse the same key when a request is retried.** The browser gives each checkout or payment action a random UUID and keeps it if the response is lost. The server uses that key to return the same result instead of creating another order or payment. Disabling the button alone would be simpler, but it would not protect against a network retry or a repeated API request.
+1. **Reuse the same key when a request is retried.** The browser gives each checkout or payment action a random UUID and keeps it if the response is lost. The server uses that key to return the same result instead of creating another order or payment. Disabling the button alone would be simpler, but it would not protect against a network retry or a repeated API request. Every accepted payment key is saved against the original attempt. A retry from another browser can use a fresh key for that same payment; both keys stay tied to that order and outcome.
 
 2. **Allow one checkout in progress per shopper.** Items are held for 15 minutes when the shopper continues to payment. During that time, the cart stays fixed and the order keeps a copy of the chosen items, prices and delivery details. I could have allowed cart changes during payment, but then I would need rules for which version the shopper was paying for. I also avoided holding stock when an item is added to the cart, since someone could leave it there without buying.
 
@@ -109,7 +109,7 @@ The code is in [CheckoutServiceImpl.create](apps/api/src/main/java/com/kinetic/c
 
 ### What I changed after the first pass
 
-I changed checkout to load the shopper’s saved cart, profile and address on the server. The browser now sends only the selected address ID. I made the product cards smaller, added quantity controls, and let shoppers edit their profile and addresses. I reduced the payment choices to Success, Failure and Processing, with a loader while waiting. I removed the partial-payment and double-click controls from the screen, but kept the backend checks for those cases. I also separated the backend into controllers, services and repositories, and grouped the frontend by page. With more time, I would add checkout cancellation and automate the browser journeys I tested manually.
+I changed checkout to load the shopper’s saved cart, profile and address on the server. The browser now sends only the selected address ID. I made the product cards smaller, added quantity controls, and let shoppers edit their profile and addresses. I added recovery for a lost checkout response: the page offers Resume payment even if refreshing the cart fails. I also made cart refreshes ignore results that arrive after a quantity update finishes. I reduced the payment choices to Success, Failure and Processing, with a loader while waiting. I removed the partial-payment and double-click controls from the screen, but kept the backend checks for those cases. I also separated the backend into controllers, services and repositories, and grouped the frontend by page. With more time, I would add checkout cancellation and automate the browser journeys I tested manually.
 
 ### What I would do in week two
 
