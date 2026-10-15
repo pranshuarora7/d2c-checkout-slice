@@ -22,6 +22,9 @@ export function CheckoutPage() {
   const [addressEditing, setAddressEditing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const recoveredOrderId =
+    error instanceof ApiError && error.code === 'ACTIVE_ORDER' ? error.details.orderId : null;
+  const activeOrderId = cart?.activeOrderId || recoveredOrderId;
   const inFlight = useRef(false);
   const navigate = useNavigate();
   const addressId = profile.data?.addresses.some((address) => address.id === selected)
@@ -29,7 +32,7 @@ export function CheckoutPage() {
     : profile.data?.addresses[0]?.id || '';
 
   async function submit() {
-    if (inFlight.current || !addressId) return;
+    if (inFlight.current || !addressId || activeOrderId) return;
     inFlight.current = true;
     setSubmitting(true);
     setError(null);
@@ -41,6 +44,7 @@ export function CheckoutPage() {
       navigate('/orders/' + result.orderId + (result.status === 'pending' ? '/payment' : ''));
     } catch (reason) {
       setError(reason);
+      if (reason instanceof ApiError && reason.code === 'ACTIVE_ORDER') void refresh();
     } finally {
       inFlight.current = false;
       setSubmitting(false);
@@ -70,23 +74,23 @@ export function CheckoutPage() {
           </Link>
         </Notice>
       ) : (
-        <ErrorNotice error={error} />
+        <ErrorNotice error={recoveredOrderId ? null : error} />
       )}
       {((profile.loading && !profile.data) || (loading && !cart)) && <Loading />}
-      {cart?.items.length === 0 && (
+      {cart?.items.length === 0 && !activeOrderId && (
         <EmptyState title="Your cart is empty.">
           Add an essential before continuing to payment.
         </EmptyState>
       )}
-      {cart?.activeOrderId && (
+      {activeOrderId && (
         <Notice>
           You already have a checkout in progress.{' '}
-          <Link to={'/orders/' + cart.activeOrderId + '/payment'}>
+          <Link to={'/orders/' + activeOrderId + '/payment'}>
             Resume payment <Arrow />
           </Link>
         </Notice>
       )}
-      {profile.data && cart && cart.items.length > 0 && !cart.activeOrderId && (
+      {profile.data && cart && cart.items.length > 0 && !activeOrderId && (
         <div className="checkout-grid">
           <div className="delivery-details">
             <ProfileEditor disabled={submitting} onEditing={setProfileEditing} />
