@@ -62,7 +62,10 @@ public class PaymentRepository {
 
     public Optional<PaymentAttempt> attemptByKey(String userId, String key) {
         return attempt(
-                "SELECT * FROM payment_attempts WHERE user_id = ? AND retry_key = ?", userId, key);
+                "SELECT a.* FROM payment_attempts a JOIN payment_attempt_keys k"
+                        + " ON k.event_id = a.event_id WHERE k.user_id = ? AND k.retry_key = ?",
+                userId,
+                key);
     }
 
     public Optional<PaymentAttempt> attemptForOrder(String orderId) {
@@ -79,6 +82,15 @@ public class PaymentRepository {
                 attempt.outcome(),
                 attempt.payload(),
                 now.toString());
+        bindKey(attempt, attempt.retryKey());
+    }
+
+    public void bindKey(PaymentAttempt attempt, String key) {
+        jdbc.update(
+                "INSERT INTO payment_attempt_keys (user_id, retry_key, event_id) VALUES (?,?,?)",
+                attempt.userId(),
+                key,
+                attempt.eventId());
     }
 
     public Optional<WebhookReceipt> receipt(String eventId) {
