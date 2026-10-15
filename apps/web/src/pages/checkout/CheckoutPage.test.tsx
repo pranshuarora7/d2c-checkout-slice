@@ -192,3 +192,60 @@ it('keeps the shopper out of payment when another buyer reserves the last item',
   await user.click(screen.getByRole('link', { name: /Review cart/ }));
   await screen.findByText('Review saved cart');
 });
+
+it('offers the existing payment even if cart refresh is unavailable after a lost checkout response', async () => {
+  const checkout = vi
+    .spyOn(api, 'checkout')
+    .mockRejectedValueOnce(new ApiError('NETWORK_ERROR', 'The response was lost. Please retry.'))
+    .mockRejectedValueOnce(
+      new ApiError('ACTIVE_ORDER', 'You already have a checkout awaiting payment.', {
+        orderId: 'KIN-recovered',
+      }),
+    );
+  render(
+    <MemoryRouter>
+      <CartProvider>
+        <ProfileProvider>
+          <CheckoutPage />
+        </ProfileProvider>
+      </CartProvider>
+    </MemoryRouter>,
+  );
+  const user = userEvent.setup();
+  await screen.findByText('Demo Shopper');
+  await user.click(screen.getByRole('button', { name: /Continue to payment/ }));
+  await screen.findByRole('alert');
+  await user.click(screen.getByRole('radio', { name: /Work/ }));
+  vi.mocked(api.cart).mockRejectedValue(new ApiError('NETWORK_ERROR', 'Cart refresh unavailable'));
+  await user.click(screen.getByRole('button', { name: /Continue to payment/ }));
+  expect(checkout.mock.calls[0][1]).not.toBe(checkout.mock.calls[1][1]);
+  expect((await screen.findByRole('link', { name: /Resume payment/ })).getAttribute('href')).toBe(
+    '/orders/KIN-recovered/payment',
+  );
+  expect(screen.queryByRole('button', { name: /Continue to payment/ })).toBeNull();
+  expect(api.cart).toHaveBeenCalledTimes(2);
+});
+
+it('refreshes cart state when checkout reports an existing order', async () => {
+  vi.spyOn(api, 'checkout').mockRejectedValue(
+    new ApiError('ACTIVE_ORDER', 'Checkout already exists.', { orderId: 'KIN-existing' }),
+  );
+  render(
+    <MemoryRouter>
+      <CartProvider>
+        <ProfileProvider>
+          <CheckoutPage />
+        </ProfileProvider>
+      </CartProvider>
+    </MemoryRouter>,
+  );
+  await screen.findByText('Demo Shopper');
+  const saved = await api.cart();
+  vi.mocked(api.cart).mockResolvedValue({ ...saved, activeOrderId: 'KIN-existing' });
+  await userEvent.setup().click(screen.getByRole('button', { name: /Continue to payment/ }));
+  expect((await screen.findByRole('link', { name: /Resume payment/ })).getAttribute('href')).toBe(
+    '/orders/KIN-existing/payment',
+  );
+  expect(screen.queryByRole('button', { name: /Continue to payment/ })).toBeNull();
+  expect(screen.queryByRole('alert')).toBeNull();
+});
