@@ -81,6 +81,12 @@ CREATE TABLE IF NOT EXISTS payment_attempts (
     created_at TEXT NOT NULL,
     UNIQUE (user_id, retry_key)
 );
+CREATE TABLE IF NOT EXISTS payment_attempt_keys (
+    user_id TEXT NOT NULL REFERENCES profiles(id),
+    retry_key TEXT NOT NULL,
+    event_id TEXT NOT NULL REFERENCES payment_attempts(event_id),
+    PRIMARY KEY (user_id, retry_key)
+);
 CREATE TABLE IF NOT EXISTS webhook_events (
     event_id TEXT PRIMARY KEY,
     order_id TEXT NOT NULL REFERENCES orders(id),
@@ -88,4 +94,4 @@ CREATE TABLE IF NOT EXISTS webhook_events (
     result TEXT NOT NULL,
     received_at TEXT NOT NULL
 );
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;
