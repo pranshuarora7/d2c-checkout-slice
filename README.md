@@ -29,9 +29,40 @@ Open **http://127.0.0.1:5173**. The API listens on `127.0.0.1:8080`; Vite proxie
 2. Review checkout. Edit your contact details or add, edit and remove saved addresses.
 3. **Continue to payment** reserves the items for 15 minutes.
 4. Choose **Success**, **Failure**, or **Processing**, then pay the displayed full amount. Every order includes a visible **₹29 packing & handling fee**; delivery is included.
-5. Success confirms the order through the webhook. Failure restores availability and keeps the cart ready. Processing shows a loader and stays pending; **Check payment status** delivers the saved callback in this demo. My orders lets you return later.
+5. Success confirms the order through the webhook. Failure releases its reserved stock; use **Add these items to cart** on the saved order to try again. Processing shows a loader and stays pending; **Check payment status** delivers the saved callback in this demo. You can keep shopping and place another order while it waits. My orders lets you return later.
 
 The bundled token `demo-customer-1` identifies the seeded shopper. Checkout accepts only `addressId`; the server loads that user's cart, profile, address and current prices. There is no real login or money movement.
+
+## How the checkout works
+
+```mermaid
+flowchart TD
+    Cart[Add products to your cart] --> Checkout[Continue to payment]
+    Checkout --> Snapshot[Save a separate copy of items, prices and delivery details]
+    Snapshot --> Hold[Reserve stock for 15 minutes and empty the shopping cart]
+    Hold --> Pay[Choose a mock payment]
+    Hold --> Shop[Keep shopping and place another order]
+    Pay --> Result{Payment result}
+    Result -- Success --> Confirmed[Confirm this order]
+    Result -- Failure --> Failed[Release stock and keep the saved order]
+    Result -- Processing --> Waiting[Show Processing in My orders]
+    Waiting -- Saved callback arrives --> Confirmed
+```
+
+A saved order is the durable copy of that checkout. It is stored in SQLite, so it survives a page refresh or API restart. Your current cart is free for your next purchase. The old order's payment confirmation, failure or expiry never clears or restores items in that new cart.
+
+```mermaid
+flowchart LR
+    Old[Order A is processing] --> Callback[Payment callback for order A]
+    Callback --> Updated[Update order A only]
+    Cart[Your new shopping cart] --> New[Place order B independently]
+```
+
+**Returning to an order:** a started payment shows **Processing** and **View payment status**. It does not ask you to pay again. An order whose payment was never started can still show **Continue to payment**. The 15-minute hold can expire in either case.
+
+**Trying again after failure or expiry:** choose **Add these items to cart** on that order. This copies its products into your current cart, checks today's stock and prices, and keeps other items already there. Repeating the action does not increase quantities again; a higher quantity already in the cart is kept. Nothing is restored automatically.
+
+See [README-HLD.md](README-HLD.md) for the five assignment subtasks, architecture, request sequence and order-state diagrams.
 
 ## Structure
 
@@ -79,7 +110,7 @@ npm run build
 npm run format:check
 ```
 
-Verified: **25 backend tests, 18 frontend tests, production build and formatting check**. Integration tests use temporary SQLite databases and actual HTTP requests, including the provider-to-webhook call. They cover ownership, strict input validation, retries, signatures, replay, amount mismatch, expiry, stock races and transaction rollback. Rollback and payment-recovery tests deliberately force database errors and expect HTTP 503; those error logs are intentional. Added regressions cover overlapping cart refreshes, lost checkout responses, payment key reuse and upgrades of existing databases.
+Verified: **33 backend tests, 30 frontend tests, production build and formatting check**. Integration tests use temporary SQLite databases and actual HTTP requests, including the provider-to-webhook call. They cover ownership, strict input validation, retries, signatures, replay, amount mismatch, expiry, stock races and transaction rollback. Rollback and payment-recovery tests deliberately force database errors and expect HTTP 503; those error logs are intentional. Regressions also cover multiple orders for one shopper, a late callback leaving the new cart untouched, safe item copying, correct Processing actions, overlapping cart refreshes, lost checkout responses, payment key reuse and database upgrades.
 
 ### Demonstrate the stock race
 
@@ -97,7 +128,7 @@ The test prints four steps: both buyers add the last unit without reserving it; 
 
 1. **Reuse the same key when a request is retried.** The browser gives each checkout or payment action a random UUID and keeps it if the response is lost. The server uses that key to return the same result instead of creating another order or payment. Disabling the button alone would be simpler, but it would not protect against a network retry or a repeated API request. Every accepted payment key is saved against the original attempt. A retry from another browser can use a fresh key for that same payment; both keys stay tied to that order and outcome.
 
-2. **Allow one checkout in progress per shopper.** Items are held for 15 minutes when the shopper continues to payment. During that time, the cart stays fixed and the order keeps a copy of the chosen items, prices and delivery details. I could have allowed cart changes during payment, but then I would need rules for which version the shopper was paying for. I also avoided holding stock when an item is added to the cart, since someone could leave it there without buying.
+2. **Keep each order separate from the shopping cart.** Checkout saves the items, prices and address, then clears the cart. The shopper can build another cart and place another order while an earlier payment is processing. I rejected blocking the cart until payment finishes because a slow payment should not stop shopping. Each order has its own stock hold and payment attempt. Old callbacks update only that order. Failed or expired items can be copied back explicitly, so they do not unexpectedly appear in a new cart.
 
 3. **Confirm payment through the webhook.** The payment provider sends a signed message to the backend, and only that message can confirm the order. The browser checks the saved order status to show the result. Trusting the payment screen would be easier, but a shopper could close it or change what it sends. Repeatedly asking the provider for every payment result would add more work to this small demo. The Processing option has one demo shortcut: checking its status releases the saved callback.
 
@@ -109,7 +140,7 @@ The code is in [CheckoutServiceImpl.create](apps/api/src/main/java/com/kinetic/c
 
 ### What I changed after the first pass
 
-I changed checkout to load the shopper’s saved cart, profile and address on the server. The browser now sends only the selected address ID. I made the product cards smaller, added quantity controls, and let shoppers edit their profile and addresses. I added recovery for a lost checkout response: the page offers Resume payment even if refreshing the cart fails. I also made cart refreshes ignore results that arrive after a quantity update finishes. I reduced the payment choices to Success, Failure and Processing, with a loader while waiting. I removed the partial-payment and double-click controls from the screen, but kept the backend checks for those cases. I also separated the backend into controllers, services and repositories, and grouped the frontend by page. With more time, I would add checkout cancellation and automate the browser journeys I tested manually.
+I changed checkout to load the shopper’s saved cart, profile and address on the server. The browser now sends only the selected address ID. I made the product cards smaller, added quantity controls, and let shoppers edit their profile and addresses. I added recovery for a lost checkout response: the page links to the saved order even if refreshing the cart fails. I also made cart refreshes ignore results that arrive after a quantity update finishes. After interview feedback, I removed the cart lock and the one-pending-order restriction. Checkout now saves its own snapshot and clears the cart immediately. I also made every started payment show Processing on return, including a delayed callback from a Success or Failure scenario. I reduced the payment choices to Success, Failure and Processing, with a loader while waiting. I removed the partial-payment and double-click controls from the screen, but kept the backend checks for those cases. I also separated the backend into controllers, services and repositories, and grouped the frontend by page. With more time, I would add checkout cancellation and automate the browser journeys I tested manually.
 
 ### What I would do in week two
 

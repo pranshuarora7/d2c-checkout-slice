@@ -42,7 +42,6 @@ it('replaces Add with the saved quantity and removes the item when it reaches ze
     handling: quantity ? 29 : 0,
     total: quantity ? 100 * quantity + 29 : 0,
     currency: 'INR',
-    activeOrderId: null,
   });
   vi.spyOn(api, 'products').mockResolvedValue([product]);
   vi.spyOn(api, 'cart').mockResolvedValue(cart(0));

@@ -5,7 +5,6 @@ import { Arrow } from '../../components/Arrow';
 import { EmptyState } from '../../components/EmptyState';
 import { ErrorNotice } from '../../components/ErrorNotice';
 import { Loading } from '../../components/Loading';
-import { Notice } from '../../components/Notice';
 import { PageHeading } from '../../components/PageHeading';
 import { ProductArt } from '../../components/ProductArt';
 import { OrderSummary } from '../../components/OrderSummary';
@@ -42,14 +41,6 @@ export function CartPage() {
       )}
       {cart && cart.items.length > 0 && (
         <>
-          {cart.activeOrderId && (
-            <Notice>
-              Your items are held for your current checkout.{' '}
-              <Link to={'/orders/' + cart.activeOrderId + '/payment'}>
-                Continue to payment <Arrow />
-              </Link>
-            </Notice>
-          )}
           <div className="checkout-grid">
             <section className="cart-list" aria-label="Cart items">
               <div className="list-heading">
@@ -68,18 +59,18 @@ export function CartPage() {
                         name={item.name}
                         quantity={item.quantity}
                         max={Math.min(10, item.available)}
-                        disabled={updating || !!cart.activeOrderId}
+                        disabled={updating}
                         onChange={(quantity) => void update(item.sku, quantity)}
                       />
                       <button
                         className="text-button muted"
-                        disabled={updating || !!cart.activeOrderId}
+                        disabled={updating}
                         onClick={() => void update(item.sku, 0)}
                       >
                         Remove
                       </button>
                     </div>
-                    {item.quantity > item.available && !cart.activeOrderId && (
+                    {item.quantity > item.available && (
                       <span className="inline-error">
                         Only {item.available} available. Please lower the quantity or remove this
                         item.
@@ -91,11 +82,8 @@ export function CartPage() {
               ))}
             </section>
             <OrderSummary totals={cart}>
-              <Link
-                className="button button-lime"
-                to={cart.activeOrderId ? '/orders/' + cart.activeOrderId + '/payment' : '/checkout'}
-              >
-                {cart.activeOrderId ? 'Continue to payment' : 'Continue to checkout'}
+              <Link className="button button-lime" to="/checkout">
+                Continue to checkout
                 <Arrow />
               </Link>
               <p className="fine-print">

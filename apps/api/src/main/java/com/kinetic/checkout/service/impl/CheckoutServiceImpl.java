@@ -62,21 +62,15 @@ public class CheckoutServiceImpl implements CheckoutService {
         var previous = orders.byKey(userId, retryKey);
         if (previous.isPresent()) {
             if (!previous.get().addressId().equals(addressId)) {
-                throw ApiException.conflict(
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
                         "RETRY_KEY_REUSED",
-                        "That retry key was already used with another address.");
+                        "This checkout was already saved with another address. View the saved"
+                            + " order.",
+                        Map.of("orderId", previous.get().id()));
             }
             return new CheckoutDtos.Result(previous.get(), true);
         }
-        orders.pending(userId)
-                .ifPresent(
-                        order -> {
-                            throw new ApiException(
-                                    HttpStatus.CONFLICT,
-                                    "ACTIVE_ORDER",
-                                    "You already have a checkout awaiting payment.",
-                                    Map.of("orderId", order.id()));
-                        });
         var profile = profiles.get(userId);
         var address =
                 profile.addresses().stream()
@@ -142,6 +136,8 @@ public class CheckoutServiceImpl implements CheckoutService {
                         now);
         orders.insert(order);
         payments.createIntent(order);
+        // The order owns its item/address/price snapshot. Start a fresh shopping cart now.
+        carts.clear(userId);
         return new CheckoutDtos.Result(order, false);
     }
 }

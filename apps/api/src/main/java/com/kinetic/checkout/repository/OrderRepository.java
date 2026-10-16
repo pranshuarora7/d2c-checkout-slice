@@ -75,10 +75,6 @@ VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         return find("SELECT * FROM orders WHERE user_id = ? AND retry_key = ?", userId, key);
     }
 
-    public Optional<Order> pending(String userId) {
-        return find("SELECT * FROM orders WHERE user_id = ? AND status = 'pending'", userId);
-    }
-
     public List<Order> pending() {
         return jdbc.query("SELECT * FROM orders WHERE status = 'pending'", this::map);
     }
@@ -86,7 +82,8 @@ VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     public List<OrderDtos.Summary> list(String userId) {
         return jdbc.query(
                 """
-SELECT o.*, (SELECT SUM(quantity) FROM order_items WHERE order_id=o.id) AS item_count
+SELECT o.*, (SELECT SUM(quantity) FROM order_items WHERE order_id=o.id) AS item_count,
+  EXISTS (SELECT 1 FROM payment_attempts a WHERE a.order_id=o.id) AS payment_started
 FROM orders o WHERE user_id = ? ORDER BY created_at DESC LIMIT 100
 """,
                 (r, n) ->
@@ -96,7 +93,8 @@ FROM orders o WHERE user_id = ? ORDER BY created_at DESC LIMIT 100
                                 r.getDouble("total"),
                                 r.getString("currency"),
                                 Instant.parse(r.getString("created_at")),
-                                r.getInt("item_count")),
+                                r.getInt("item_count"),
+                                r.getBoolean("payment_started")),
                 userId);
     }
 

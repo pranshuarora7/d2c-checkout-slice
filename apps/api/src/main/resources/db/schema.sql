@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS orders (
     updated_at TEXT NOT NULL,
     UNIQUE (user_id, retry_key)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS one_pending_order_per_user ON orders(user_id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS pending_orders_by_user ON orders(user_id) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS orders_by_user ON orders(user_id, created_at);
 CREATE TABLE IF NOT EXISTS order_items (
     order_id TEXT NOT NULL REFERENCES orders(id),
@@ -94,4 +94,4 @@ CREATE TABLE IF NOT EXISTS webhook_events (
     result TEXT NOT NULL,
     received_at TEXT NOT NULL
 );
-PRAGMA user_version = 3;
+PRAGMA user_version = 4;

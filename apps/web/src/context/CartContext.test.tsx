@@ -29,7 +29,6 @@ const cart = (quantity: number): Cart => ({
   handling: 29,
   total: 1299 * quantity + 29,
   currency: 'INR',
-  activeOrderId: null,
 });
 afterEach(() => {
   cleanup();
@@ -159,4 +158,25 @@ it('clears busy state after an update fails and allows recovery', async () => {
     await result.current.refresh();
   });
   expect(result.current.cart?.items[0].quantity).toBe(2);
+});
+
+it('copies a saved order into the current cart and invalidates old refreshes', async () => {
+  const read = deferred<Cart>();
+  vi.spyOn(api, 'cart').mockResolvedValueOnce(cart(1)).mockReturnValueOnce(read.promise);
+  vi.spyOn(api, 'copyOrderToCart').mockResolvedValue(cart(2));
+  const { result } = renderHook(() => useCart(), { wrapper: CartProvider });
+  await act(async () => {});
+  let refreshing!: Promise<void>;
+  act(() => {
+    refreshing = result.current.refresh();
+  });
+  await act(async () => {
+    await result.current.copyOrder('KIN-failed');
+  });
+  await act(async () => {
+    read.resolve(cart(1));
+    await refreshing;
+  });
+  expect(result.current.cart?.items[0].quantity).toBe(2);
+  expect(api.copyOrderToCart).toHaveBeenCalledExactlyOnceWith('KIN-failed');
 });

@@ -46,5 +46,6 @@ public final class OrderDtos {
             double total,
             String currency,
             Instant createdAt,
-            int itemCount) {}
+            int itemCount,
+            boolean paymentStarted) {}
 }

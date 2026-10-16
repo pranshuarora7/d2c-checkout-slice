@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
 import { Arrow } from '../../components/Arrow';
 import { ErrorNotice } from '../../components/ErrorNotice';
@@ -29,13 +29,13 @@ const copy: Record<OrderStatus, { symbol: string; title: string; description: st
     symbol: '!',
     title: "That payment didn't go through.",
     description:
-      'No real money was charged. Your items are back in your cart, ready for a fresh checkout.',
+      'No real money was charged. Your items are saved with this order. Copy them to your cart when you want to try again.',
   },
   expired: {
     symbol: '↺',
     title: 'This checkout has expired.',
     description:
-      'The 15-minute hold ended before payment was completed. Your cart is still available; availability will be checked again.',
+      'The 15-minute hold ended. Your items are saved here; copy them to your cart to check availability again.',
   },
   payment_issue: {
     symbol: '!',
@@ -48,7 +48,9 @@ const copy: Record<OrderStatus, { symbol: string; title: string; description: st
 export function OrderPage({ id }: { id: string }) {
   const load = useCallback((signal: AbortSignal) => api.order(id, signal), [id]);
   const { data: order, loading, error, refresh } = useResource(load);
-  const { refresh: refreshCart } = useCart();
+  const { copyOrder, updating } = useCart();
+  const [copyError, setCopyError] = useState<unknown>(null);
+  const navigate = useNavigate();
   const [pollingStopped, setPollingStopped] = useState(false);
   const status = order?.status;
   useEffect(() => {
@@ -63,27 +65,34 @@ export function OrderPage({ id }: { id: string }) {
       clearTimeout(limit);
     };
   }, [status, refresh]);
-  useEffect(() => {
-    if (status && status !== 'pending') void refreshCart();
-  }, [status, refreshCart]);
-
-  const processing = order?.status === 'pending' && order.paymentScenario === 'pending';
+  const processing = order?.status === 'pending' && !!order.paymentScenario;
   const state = order
     ? processing
       ? {
           symbol: '◷',
           title: 'Your payment is processing.',
           description:
-            'We’re waiting for confirmation. You don’t need to pay again. Open your payment to check its status.',
+            'We’re waiting for confirmation. You don’t need to pay again. You can keep shopping or check this payment’s status.',
         }
       : copy[order.status]
     : null;
+  async function copyItems() {
+    setCopyError(null);
+    try {
+      await copyOrder(id);
+      navigate('/cart');
+    } catch (reason) {
+      setCopyError(reason);
+    }
+  }
+
   return (
     <>
       <Link className="back-link" to="/orders">
         ← My orders
       </Link>
       <ErrorNotice error={error} retry={refresh} />
+      <ErrorNotice error={copyError} />
       {loading && !order && <Loading label="Checking your order…" />}
       {order && state && (
         <>
@@ -106,13 +115,24 @@ export function OrderPage({ id }: { id: string }) {
                 {processing ? 'View payment status' : 'Continue to payment'} <Arrow />
               </Link>
             ) : (
-              <Link
-                className="button button-dark"
-                to={order.status === 'confirmed' ? '/' : '/cart'}
-              >
-                {order.status === 'confirmed' ? 'Back to the collection' : 'Return to cart'}
+              <Link className="button button-dark" to="/">
+                Keep shopping
                 <Arrow />
               </Link>
+            )}
+            {order.status === 'pending' && (
+              <Link className="button button-outline" to="/">
+                Keep shopping <Arrow />
+              </Link>
+            )}
+            {(order.status === 'failed' || order.status === 'expired') && (
+              <button
+                className="button button-outline"
+                disabled={updating}
+                onClick={() => void copyItems()}
+              >
+                {updating ? 'Adding items…' : 'Add these items to cart'}
+              </button>
             )}
             <button className="text-button" onClick={refresh} disabled={loading}>
               {loading ? 'Checking…' : 'Refresh status ↻'}

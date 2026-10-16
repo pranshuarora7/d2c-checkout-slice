@@ -87,7 +87,7 @@ public class PaymentAttemptServiceImpl implements PaymentAttemptService {
 
     @Transactional(readOnly = true)
     @Override
-    public PaymentAttempt pending(String userId, String orderId) {
+    public PaymentAttempt existing(String userId, String orderId) {
         orders.owned(userId, orderId);
         var attempt =
                 payments.attemptForOrder(orderId)
@@ -96,10 +96,6 @@ public class PaymentAttemptServiceImpl implements PaymentAttemptService {
                                         ApiException.conflict(
                                                 "PAYMENT_NOT_STARTED",
                                                 "Choose a demo payment scenario first."));
-        if (!attempt.outcome().equals("pending")) {
-            throw ApiException.conflict(
-                    "NOT_PENDING_SCENARIO", "This payment is not waiting for manual confirmation.");
-        }
         return attempt;
     }
 }

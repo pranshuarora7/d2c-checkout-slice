@@ -25,6 +25,11 @@ public class CartController {
         return carts.get(userId);
     }
 
+    @PutMapping("/api/cart/from-orders/{orderId}")
+    CartDtos.Cart copyOrder(@RequestAttribute String userId, @PathVariable String orderId) {
+        return carts.copyOrder(userId, orderId);
+    }
+
     @PutMapping("/api/cart/items/{sku}")
     CartDtos.Cart update(
             @RequestAttribute String userId,

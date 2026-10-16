@@ -41,7 +41,7 @@ public class PaymentServiceImpl implements PaymentService {
     public OrderDtos.Response complete(String userId, String id) {
         lifecycle.expireDue();
         // Reuses the persisted event across refreshes/restarts; duplicate completions are safe.
-        provider.deliver(attempts.pending(userId, id));
+        provider.deliver(attempts.existing(userId, id));
         return orders.get(userId, id);
     }
 }

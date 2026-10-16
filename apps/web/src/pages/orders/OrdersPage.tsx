@@ -43,7 +43,7 @@ export function OrdersPage() {
               </h2>
               <p>Placed {date(order.createdAt)}</p>
             </div>
-            <StatusBadge status={order.status} />
+            <StatusBadge status={order.status} processing={order.paymentStarted} />
             <strong className="order-row-price">{money(order.total)}</strong>
             <Link
               className="button button-outline button-small"

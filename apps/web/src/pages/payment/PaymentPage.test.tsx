@@ -43,7 +43,6 @@ function renderPayment(order: Order) {
     handling: 0,
     total: 0,
     currency: 'INR',
-    activeOrderId: order.id,
   });
   render(
     <MemoryRouter initialEntries={['/payment']}>
@@ -57,17 +56,22 @@ function renderPayment(order: Order) {
   );
 }
 
-it('restores a processing payment and checks it without starting another payment', async () => {
-  const order = paymentOrder('pending');
-  const pay = vi.spyOn(api, 'pay');
-  const complete = vi
-    .spyOn(api, 'completePayment')
-    .mockResolvedValue({ ...order, status: 'confirmed' });
-  renderPayment(order);
-  await screen.findByText('Your payment is processing.');
-  expect(screen.queryByRole('radio')).toBeNull();
-  await userEvent.setup().click(screen.getByRole('button', { name: 'Check payment status' }));
-  await screen.findByText('Order status page');
-  expect(complete).toHaveBeenCalledExactlyOnceWith(order.id);
-  expect(pay).not.toHaveBeenCalled();
-});
+it.each(['pending', 'success', 'failure', 'duplicate'] as const)(
+  'restores a %s attempt as Processing and checks it without paying again',
+  async (scenario) => {
+    const order = paymentOrder(scenario);
+    const pay = vi.spyOn(api, 'pay');
+    const complete = vi
+      .spyOn(api, 'completePayment')
+      .mockResolvedValue({ ...order, status: 'confirmed' });
+    renderPayment(order);
+    await screen.findByText('Your payment is processing.');
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Pay / })).toBeNull();
+    expect(screen.getByRole('link', { name: /Keep shopping/ })).toBeTruthy();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Check payment status' }));
+    await screen.findByText('Order status page');
+    expect(complete).toHaveBeenCalledExactlyOnceWith(order.id);
+    expect(pay).not.toHaveBeenCalled();
+  },
+);

@@ -18,6 +18,7 @@ type CartState = {
   error: string | null;
   refresh: () => Promise<void>;
   setQuantity: (sku: string, quantity: number) => Promise<void>;
+  copyOrder: (id: string) => Promise<void>;
 };
 const CartContext = createContext<CartState | null>(null);
 
@@ -49,13 +50,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
-  const setQuantity = useCallback(async (sku: string, quantity: number) => {
+  const mutate = useCallback(async (save: () => Promise<Cart>) => {
     if (mutationInFlight.current) return;
     mutationInFlight.current = true;
     ++revision.current;
     setUpdating(true);
     try {
-      const next = await api.setQuantity(sku, quantity);
+      const next = await save();
       clearCheckoutKeys();
       setCart(next);
       setError(null);
@@ -67,9 +68,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, []);
+  const setQuantity = useCallback(
+    (sku: string, quantity: number) => mutate(() => api.setQuantity(sku, quantity)),
+    [mutate],
+  );
+  const copyOrder = useCallback((id: string) => mutate(() => api.copyOrderToCart(id)), [mutate]);
 
   return (
-    <CartContext.Provider value={{ cart, loading, updating, error, refresh, setQuantity }}>
+    <CartContext.Provider
+      value={{ cart, loading, updating, error, refresh, setQuantity, copyOrder }}
+    >
       {children}
     </CartContext.Provider>
   );

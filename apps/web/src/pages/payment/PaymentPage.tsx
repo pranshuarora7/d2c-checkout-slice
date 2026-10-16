@@ -22,7 +22,7 @@ const scenarios: { value: PaymentScenario; title: string; description: string; i
   {
     value: 'failure',
     title: 'Failure',
-    description: 'Payment fails. Your cart is ready to try again.',
+    description: 'Payment fails. Your saved order keeps its items for a retry.',
     icon: '↺',
   },
   {
@@ -45,7 +45,7 @@ export function PaymentPage({ id }: { id: string }) {
   const inFlight = useRef(false);
   const navigate = useNavigate();
   const scenario = order.data?.paymentScenario || chosen || selected;
-  const awaitingConfirmation = order.data?.paymentScenario === 'pending';
+  const awaitingConfirmation = !!order.data?.paymentScenario;
   const locked = !!order.data?.paymentScenario || chosen !== null;
   const seconds = order.data
     ? Math.max(0, Math.ceil((Date.parse(order.data.expiresAt) - now) / 1000))
@@ -58,6 +58,16 @@ export function PaymentPage({ id }: { id: string }) {
   useEffect(() => {
     if (order.data?.status === 'pending' && seconds === 0) refreshOrder();
   }, [seconds, order.data?.status, refreshOrder]);
+
+  useEffect(() => {
+    if (!awaitingConfirmation || order.data?.status !== 'pending') return;
+    const timer = setInterval(refreshOrder, 3000);
+    const stop = setTimeout(() => clearInterval(timer), 60_000);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(stop);
+    };
+  }, [awaitingConfirmation, order.data?.status, refreshOrder]);
 
   async function pay() {
     if (inFlight.current) return;
@@ -91,7 +101,7 @@ export function PaymentPage({ id }: { id: string }) {
         title={awaitingConfirmation ? 'Payment in progress.' : 'Complete your payment.'}
       >
         {awaitingConfirmation
-          ? 'Your order is saved. Check here for an update.'
+          ? 'Your order is saved. You can keep shopping while it is processing.'
           : 'Your total is ready. This is a demo; no real money is charged.'}
       </PageHeading>
       <ErrorNotice error={order.error} retry={order.refresh} />
@@ -112,7 +122,9 @@ export function PaymentPage({ id }: { id: string }) {
                   We’re waiting for confirmation. You don’t need to pay again. Check the status
                   below, or come back through My orders.
                 </p>
-                <p className="fine-print">Demo: checking the status completes this payment.</p>
+                <p className="fine-print">
+                  Demo: checking the status sends the saved payment update.
+                </p>
               </div>
             ) : (
               <fieldset className="payment-scenarios">
@@ -161,6 +173,11 @@ export function PaymentPage({ id }: { id: string }) {
                   : 'Pay ' + money(order.data.total)}
               {busy ? <span className="spinner" aria-hidden="true" /> : <Arrow />}
             </button>
+            {awaitingConfirmation && (
+              <Link className="button button-outline" to="/">
+                Keep shopping <Arrow />
+              </Link>
+            )}
             <Link className="text-link payment-status-link" to={'/orders/' + id}>
               Check order status <Arrow />
             </Link>

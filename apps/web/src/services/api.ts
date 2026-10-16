@@ -77,6 +77,8 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ quantity }),
     }),
+  copyOrderToCart: (id: string) =>
+    request<Cart>('/cart/from-orders/' + encodeURIComponent(id), { method: 'PUT' }),
   checkout: (addressId: string, key: string) =>
     request<CheckoutResult>('/checkouts', {
       method: 'POST',

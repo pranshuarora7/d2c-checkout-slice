@@ -12,7 +12,7 @@ final class DatabaseMigration {
 
     static void upgrade(DataSource source) {
         var jdbc = new JdbcTemplate(source);
-        if (jdbc.queryForObject("PRAGMA user_version", Integer.class) >= 3) return;
+        if (jdbc.queryForObject("PRAGMA user_version", Integer.class) >= 4) return;
         new TransactionTemplate(new DataSourceTransactionManager(source))
                 .executeWithoutResult(
                         status -> {
@@ -39,10 +39,11 @@ CREATE TABLE payment_attempts_v2 (
                                 jdbc.execute("DROP TABLE payment_attempts");
                                 jdbc.execute(
                                         "ALTER TABLE payment_attempts_v2 RENAME TO"
-                                            + " payment_attempts");
+                                                + " payment_attempts");
                             }
-                            jdbc.execute(
-                                    """
+                            if (jdbc.queryForObject("PRAGMA user_version", Integer.class) < 3) {
+                                jdbc.execute(
+                                        """
 CREATE TABLE payment_attempt_keys (
     user_id TEXT NOT NULL REFERENCES profiles(id),
     retry_key TEXT NOT NULL,
@@ -50,11 +51,16 @@ CREATE TABLE payment_attempt_keys (
     PRIMARY KEY (user_id, retry_key)
 )
 """);
-                            jdbc.update(
-                                    "INSERT INTO payment_attempt_keys (user_id, retry_key,"
-                                        + " event_id) SELECT user_id, retry_key, event_id FROM"
-                                        + " payment_attempts");
-                            jdbc.execute("PRAGMA user_version = 3");
+                                jdbc.update(
+                                        "INSERT INTO payment_attempt_keys (user_id, retry_key,"
+                                            + " event_id) SELECT user_id, retry_key, event_id FROM"
+                                            + " payment_attempts");
+                            }
+                            jdbc.execute("DROP INDEX IF EXISTS one_pending_order_per_user");
+                            jdbc.execute(
+                                    "CREATE INDEX IF NOT EXISTS pending_orders_by_user ON"
+                                        + " orders(user_id) WHERE status = 'pending'");
+                            jdbc.execute("PRAGMA user_version = 4");
                         });
     }
 }

@@ -69,6 +69,7 @@ class CheckoutFlowTest {
     void reset() {
         clock.now = Instant.parse("2026-10-14T00:00:00Z");
         jdbc.execute("DROP TRIGGER IF EXISTS reject_receipt");
+        jdbc.execute("DROP TRIGGER IF EXISTS reject_intent");
         for (String table :
                 List.of(
                         "webhook_events",
@@ -197,6 +198,7 @@ class CheckoutFlowTest {
         assertThat(snapshot.at("/customer/name").asText()).isEqualTo("Demo Shopper");
         assertThat(snapshot.at("/delivery/pinCode").asText()).isEqualTo("560038");
         pay(USER, order, "failure", key());
+        assertThat(copyOrder(USER, order).getStatusCode().value()).isEqualTo(200);
         assertThat(checkout(USER, "addr_home", key()).getStatusCode().value()).isEqualTo(404);
         String fresh = checkout(USER, addressId, key()).getBody().get("orderId").asText();
         assertThat(get("/api/orders/" + fresh, USER).getBody().at("/customer/name").asText())
@@ -434,16 +436,27 @@ class CheckoutFlowTest {
     }
 
     @Test
-    void activeCheckoutLocksCartAndChangedAddressCannotReuseKey() {
+    void checkoutSnapshotClearsCartAndChangedAddressCannotReuseKey() {
         quantity(USER, "TRAINING-MAT", 1);
         String key = key();
-        checkout(USER, "addr_home", key);
-        assertThat(checkout(USER, "addr_work", key).getBody().get("code").asText())
-                .isEqualTo("RETRY_KEY_REUSED");
+        String first = checkout(USER, "addr_home", key).getBody().get("orderId").asText();
+        assertThat(get("/api/cart", USER).getBody().get("items")).isEmpty();
+        var changed = checkout(USER, "addr_work", key);
+        assertThat(changed.getBody().get("code").asText()).isEqualTo("RETRY_KEY_REUSED");
+        assertThat(changed.getBody().at("/details/orderId").asText()).isEqualTo(first);
         assertThat(checkout(USER, "addr_home", key()).getBody().get("code").asText())
-                .isEqualTo("ACTIVE_ORDER");
-        assertThat(quantity(USER, "TRAINING-MAT", 2).getStatusCode().value()).isEqualTo(409);
-        assertThat(count("orders")).isEqualTo(1);
+                .isEqualTo("EMPTY_CART");
+        assertThat(quantity(USER, "TRAINING-MAT", 2).getStatusCode().value()).isEqualTo(200);
+        assertThat(checkout(USER, "addr_work", key()).getStatusCode().value()).isEqualTo(201);
+        assertThat(count("orders")).isEqualTo(2);
+        assertThat(
+                        get("/api/orders/" + first, USER)
+                                .getBody()
+                                .get("items")
+                                .get(0)
+                                .get("quantity")
+                                .asInt())
+                .isEqualTo(1);
     }
 
     @Test
@@ -457,7 +470,8 @@ class CheckoutFlowTest {
         assertThat(pay(USER, id, "success", key).getStatusCode().value()).isEqualTo(409);
         assertThat(stock("TRAINING-MAT")).isEqualTo(8);
         assertThat(count("webhook_events")).isEqualTo(1);
-        assertThat(get("/api/cart", USER).getBody().get("items")).hasSize(1);
+        assertThat(get("/api/cart", USER).getBody().get("items")).isEmpty();
+        assertThat(copyOrder(USER, id).getStatusCode().value()).isEqualTo(200);
         assertThat(checkout(USER, "addr_home", key()).getStatusCode().value()).isEqualTo(201);
     }
 
@@ -540,7 +554,8 @@ class CheckoutFlowTest {
                         + " RAISE(ABORT,'test failure'); END");
         assertThat(signed(body).getStatusCode().value()).isEqualTo(503);
         assertThat(status(id)).isEqualTo("pending");
-        assertThat(get("/api/cart", USER).getBody().get("items")).hasSize(1);
+        assertThat(get("/api/cart", USER).getBody().get("items")).isEmpty();
+        assertThat(get("/api/orders/" + id, USER).getBody().get("items")).hasSize(1);
         assertThat(count("webhook_events")).isZero();
         jdbc.execute("DROP TRIGGER reject_receipt");
         assertThat(signed(body).getBody().get("status").asText()).isEqualTo("confirmed");
@@ -605,7 +620,7 @@ class CheckoutFlowTest {
         String originalKey = key();
         jdbc.execute(
                 "CREATE TRIGGER reject_receipt BEFORE INSERT ON webhook_events BEGIN SELECT"
-                    + " RAISE(ABORT,'test failure'); END");
+                        + " RAISE(ABORT,'test failure'); END");
         assertThat(pay(USER, id, "success", originalKey).getStatusCode().value()).isEqualTo(503);
         assertThat(count("payment_attempts")).isEqualTo(1);
         assertThat(status(id)).isEqualTo("pending");
@@ -618,7 +633,145 @@ class CheckoutFlowTest {
         assertThat(count("webhook_events")).isEqualTo(1);
         System.out.println(
                 "REVIEW: a fresh browser key currently recovers the saved attempt after delivery"
-                    + " failure.");
+                        + " failure.");
+    }
+
+    @Test
+    void processingOrderDoesNotBlockAnotherOrderOrChangeTheNewCart() {
+        String first = createOrder();
+        pay(USER, first, "pending", key());
+        assertThat(quantity(USER, "RESISTANCE-LOOP", 2).getStatusCode().value()).isEqualTo(200);
+        String second = checkout(USER, "addr_work", key()).getBody().get("orderId").asText();
+        pay(USER, second, "pending", key());
+        quantity(USER, "STEEL-BOTTLE", 1);
+        var cartBefore = get("/api/cart", USER).getBody();
+        var completed =
+                request(
+                        HttpMethod.POST,
+                        "/api/orders/" + first + "/mock-payment/complete",
+                        USER,
+                        null,
+                        null);
+        assertThat(completed.getBody().get("status").asText()).isEqualTo("confirmed");
+        assertThat(get("/api/cart", USER).getBody()).isEqualTo(cartBefore);
+        assertThat(status(second)).isEqualTo("pending");
+        assertThat(
+                        get("/api/orders/" + first, USER)
+                                .getBody()
+                                .get("items")
+                                .get(0)
+                                .get("sku")
+                                .asText())
+                .isEqualTo("TRAINING-MAT");
+        assertThat(
+                        get("/api/orders/" + second, USER)
+                                .getBody()
+                                .get("items")
+                                .get(0)
+                                .get("sku")
+                                .asText())
+                .isEqualTo("RESISTANCE-LOOP");
+        assertThat(get("/api/orders", USER).getBody()).hasSize(2);
+        assertThat(get("/api/orders", USER).getBody())
+                .anySatisfy(row -> assertThat(row.get("paymentStarted").asBoolean()).isTrue());
+    }
+
+    @Test
+    void oldFailureAndExpiryLeaveNewCartUntouched() {
+        String failed = createOrder();
+        quantity(USER, "STEEL-BOTTLE", 1);
+        var newCart = get("/api/cart", USER).getBody();
+        pay(USER, failed, "failure", key());
+        assertThat(get("/api/cart", USER).getBody()).isEqualTo(newCart);
+        String expiring = checkout(USER, "addr_work", key()).getBody().get("orderId").asText();
+        quantity(USER, "RESISTANCE-LOOP", 2);
+        newCart = get("/api/cart", USER).getBody();
+        clock.now = clock.now.plus(Duration.ofMinutes(16));
+        assertThat(status(expiring)).isEqualTo("expired");
+        assertThat(get("/api/cart", USER).getBody()).isEqualTo(newCart);
+    }
+
+    @Test
+    void copyingFailedOrderIsOwnedRepeatableAndPreservesNewItemsAndQuantities() {
+        String id = createOrder();
+        assertThat(copyOrder(USER, id).getStatusCode().value()).isEqualTo(409);
+        pay(USER, id, "failure", key());
+        quantity(USER, "TRAINING-MAT", 2);
+        quantity(USER, "STEEL-BOTTLE", 1);
+        assertThat(copyOrder(OTHER, id).getStatusCode().value()).isEqualTo(404);
+        var copied = copyOrder(USER, id);
+        assertThat(copied.getStatusCode().value()).isEqualTo(200);
+        assertThat(copied.getBody().get("items")).hasSize(2);
+        assertThat(copyOrder(USER, id).getBody()).isEqualTo(copied.getBody());
+        assertThat(get("/api/cart", USER).getBody().get("items").get(0).get("quantity").asInt())
+                .isEqualTo(2);
+        assertThat(stock("TRAINING-MAT")).isEqualTo(8);
+    }
+
+    @Test
+    void copyingAnOrderRollsBackAllItemsWhenOneIsUnavailable() {
+        quantity(USER, "TRAINING-MAT", 1);
+        quantity(USER, "RESISTANCE-LOOP", 1);
+        String id = checkout(USER, "addr_home", key()).getBody().get("orderId").asText();
+        pay(USER, id, "failure", key());
+        jdbc.update("UPDATE products SET stock=0 WHERE sku='RESISTANCE-LOOP'");
+        var result = copyOrder(USER, id);
+        assertThat(result.getStatusCode().value()).isEqualTo(409);
+        assertThat(result.getBody().get("code").asText()).isEqualTo("OUT_OF_STOCK");
+        assertThat(get("/api/cart", USER).getBody().get("items")).isEmpty();
+    }
+
+    @Test
+    void statusCheckCanDeliverAnExistingAttemptAfterCallbackFailure() {
+        String id = createOrder();
+        jdbc.execute(
+                "CREATE TRIGGER reject_receipt BEFORE INSERT ON webhook_events BEGIN SELECT"
+                        + " RAISE(ABORT,'test failure'); END");
+        assertThat(pay(USER, id, "success", key()).getStatusCode().value()).isEqualTo(503);
+        jdbc.execute("DROP TRIGGER reject_receipt");
+        var result =
+                request(
+                        HttpMethod.POST,
+                        "/api/orders/" + id + "/mock-payment/complete",
+                        USER,
+                        null,
+                        null);
+        assertThat(result.getBody().get("status").asText()).isEqualTo("confirmed");
+        assertThat(count("payment_attempts")).isEqualTo(1);
+        assertThat(count("webhook_events")).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentCheckoutsWithDifferentKeysConsumeTheCartOnlyOnce() throws Exception {
+        quantity(USER, "TRAINING-MAT", 1);
+        var responses =
+                race(
+                        () -> checkout(USER, "addr_home", key()),
+                        () -> checkout(USER, "addr_home", key()));
+        assertThat(responses.stream().map(r -> r.getStatusCode().value()))
+                .containsExactlyInAnyOrder(201, 409);
+        assertThat(count("orders")).isEqualTo(1);
+        assertThat(stock("TRAINING-MAT")).isEqualTo(7);
+        assertThat(get("/api/cart", USER).getBody().get("items")).isEmpty();
+    }
+
+    @Test
+    void failedCheckoutTransactionKeepsTheCartAndRestoresStock() {
+        quantity(USER, "TRAINING-MAT", 1);
+        jdbc.execute(
+                "CREATE TRIGGER reject_intent BEFORE INSERT ON payment_intents BEGIN SELECT"
+                    + " RAISE(ABORT,'test intent failure'); END");
+        assertThat(checkout(USER, "addr_home", key()).getStatusCode().value()).isEqualTo(503);
+        assertThat(count("orders")).isZero();
+        assertThat(stock("TRAINING-MAT")).isEqualTo(8);
+        assertThat(get("/api/cart", USER).getBody().get("items")).hasSize(1);
+        jdbc.execute("DROP TRIGGER reject_intent");
+        assertThat(checkout(USER, "addr_home", key()).getStatusCode().value()).isEqualTo(201);
+        assertThat(get("/api/cart", USER).getBody().get("items")).isEmpty();
+    }
+
+    private ResponseEntity<JsonNode> copyOrder(String token, String id) {
+        return request(HttpMethod.PUT, "/api/cart/from-orders/" + id, token, null, null);
     }
 
     private ResponseEntity<JsonNode> get(String path, String token) {

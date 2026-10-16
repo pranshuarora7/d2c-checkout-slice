@@ -20,7 +20,7 @@ class DatabaseMigrationTest {
     @TempDir Path directory;
 
     @ParameterizedTest
-    @ValueSource(ints = {1, 2})
+    @ValueSource(ints = {1, 2, 3})
     void upgradePreservesExistingOrdersAndBindsTheirOriginalPaymentKeys(int version) {
         var config = new SQLiteConfig();
         config.enforceForeignKeys(true);
@@ -32,7 +32,11 @@ class DatabaseMigrationTest {
                         new ClassPathResource("db/seed.sql"))
                 .execute(source);
         var jdbc = new JdbcTemplate(source);
-        jdbc.execute("DROP TABLE payment_attempt_keys");
+        if (version < 3) jdbc.execute("DROP TABLE payment_attempt_keys");
+        jdbc.execute("DROP INDEX pending_orders_by_user");
+        jdbc.execute(
+                "CREATE UNIQUE INDEX one_pending_order_per_user ON orders(user_id) WHERE"
+                    + " status='pending'");
         if (version == 1) jdbc.execute("ALTER TABLE addresses DROP COLUMN active");
         jdbc.execute("PRAGMA user_version = " + version);
         jdbc.update(
@@ -45,18 +49,22 @@ INSERT INTO orders VALUES (
 """);
         jdbc.update(
                 "INSERT INTO order_items VALUES ('KIN-existing','TRAINING-MAT','Training"
-                    + " mat','mat',1299,1,1299)");
+                        + " mat','mat',1299,1,1299)");
         jdbc.update("INSERT INTO payment_intents VALUES ('pi_existing','KIN-existing',1328,'INR')");
         jdbc.update(
                 "INSERT INTO payment_attempts VALUES"
                     + " ('evt_existing','user_demo_1','KIN-existing','original-key','success','{}','2026-10-15T00:00:00Z')");
         jdbc.update("UPDATE products SET stock=7 WHERE sku='TRAINING-MAT'");
+        if (version == 3)
+            jdbc.update(
+                    "INSERT INTO payment_attempt_keys VALUES"
+                        + " ('user_demo_1','original-key','evt_existing')");
         var before = jdbc.queryForList("SELECT * FROM orders");
 
         DatabaseMigration.upgrade(source);
         DatabaseMigration.upgrade(source);
 
-        assertThat(jdbc.queryForObject("PRAGMA user_version", Integer.class)).isEqualTo(3);
+        assertThat(jdbc.queryForObject("PRAGMA user_version", Integer.class)).isEqualTo(4);
         assertThat(jdbc.queryForList("SELECT * FROM orders")).isEqualTo(before);
         assertThat(
                         jdbc.queryForObject(
@@ -69,6 +77,11 @@ INSERT INTO orders VALUES (
                 .isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM payment_attempt_keys", Integer.class))
                 .isEqualTo(1);
+        assertThat(
+                        jdbc.queryForList(
+                                "SELECT name FROM sqlite_master WHERE"
+                                    + " name='one_pending_order_per_user'"))
+                .isEmpty();
         var repository = new PaymentRepository(jdbc);
         var attempt = repository.attemptByKey("user_demo_1", "original-key").orElseThrow();
         assertThat(attempt.eventId()).isEqualTo("evt_existing");
@@ -86,7 +99,7 @@ INSERT INTO orders VALUES (
                                 directory.resolve("fresh.sqlite").toString(),
                                 "sample/checkout-sample.sqlite");
         var jdbc = new JdbcTemplate(source);
-        assertThat(jdbc.queryForObject("PRAGMA user_version", Integer.class)).isEqualTo(3);
+        assertThat(jdbc.queryForObject("PRAGMA user_version", Integer.class)).isEqualTo(4);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM products", Integer.class))
                 .isEqualTo(5);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM addresses", Integer.class))

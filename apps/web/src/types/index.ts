@@ -19,7 +19,7 @@ export type CartItem = {
   lineTotal: number;
 };
 export type Totals = { subtotal: number; handling: number; total: number; currency: string };
-export type Cart = Totals & { items: CartItem[]; activeOrderId: string | null };
+export type Cart = Totals & { items: CartItem[] };
 export type Address = {
   id: string;
   label: string;
@@ -46,6 +46,7 @@ export type Order = Totals & {
 };
 export type OrderSummary = Pick<Order, 'id' | 'status' | 'total' | 'currency' | 'createdAt'> & {
   itemCount: number;
+  paymentStarted: boolean;
 };
 export type CheckoutResult = {
   orderId: string;

@@ -23,8 +23,7 @@ export function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const recoveredOrderId =
-    error instanceof ApiError && error.code === 'ACTIVE_ORDER' ? error.details.orderId : null;
-  const activeOrderId = cart?.activeOrderId || recoveredOrderId;
+    error instanceof ApiError && error.code === 'RETRY_KEY_REUSED' ? error.details.orderId : null;
   const inFlight = useRef(false);
   const navigate = useNavigate();
   const addressId = profile.data?.addresses.some((address) => address.id === selected)
@@ -32,11 +31,11 @@ export function CheckoutPage() {
     : profile.data?.addresses[0]?.id || '';
 
   async function submit() {
-    if (inFlight.current || !addressId || activeOrderId) return;
+    if (inFlight.current || !addressId || recoveredOrderId) return;
     inFlight.current = true;
     setSubmitting(true);
     setError(null);
-    const scope = 'checkout:' + addressId;
+    const scope = 'checkout:cart';
     try {
       const result = await api.checkout(addressId, retryKey(scope));
       forgetKey(scope);
@@ -44,7 +43,7 @@ export function CheckoutPage() {
       navigate('/orders/' + result.orderId + (result.status === 'pending' ? '/payment' : ''));
     } catch (reason) {
       setError(reason);
-      if (reason instanceof ApiError && reason.code === 'ACTIVE_ORDER') void refresh();
+      if (reason instanceof ApiError && reason.code === 'RETRY_KEY_REUSED') void refresh();
     } finally {
       inFlight.current = false;
       setSubmitting(false);
@@ -77,20 +76,20 @@ export function CheckoutPage() {
         <ErrorNotice error={recoveredOrderId ? null : error} />
       )}
       {((profile.loading && !profile.data) || (loading && !cart)) && <Loading />}
-      {cart?.items.length === 0 && !activeOrderId && (
+      {cart?.items.length === 0 && !recoveredOrderId && (
         <EmptyState title="Your cart is empty.">
-          Add an essential before continuing to payment.
+          Add an essential to start a new checkout. Existing purchases are in My orders.
         </EmptyState>
       )}
-      {activeOrderId && (
+      {recoveredOrderId && (
         <Notice>
-          You already have a checkout in progress.{' '}
-          <Link to={'/orders/' + activeOrderId + '/payment'}>
-            Resume payment <Arrow />
+          Your checkout was already saved with its original delivery details.{' '}
+          <Link to={'/orders/' + recoveredOrderId}>
+            View saved order <Arrow />
           </Link>
         </Notice>
       )}
-      {profile.data && cart && cart.items.length > 0 && !activeOrderId && (
+      {profile.data && cart && cart.items.length > 0 && !recoveredOrderId && (
         <div className="checkout-grid">
           <div className="delivery-details">
             <ProfileEditor disabled={submitting} onEditing={setProfileEditing} />

@@ -4,7 +4,6 @@ import { useCart } from '../../context/CartContext';
 import { Arrow } from '../../components/Arrow';
 import { ErrorNotice } from '../../components/ErrorNotice';
 import { Loading } from '../../components/Loading';
-import { Notice } from '../../components/Notice';
 import { ProductArt } from '../../components/ProductArt';
 import { QuantityControl } from '../../components/QuantityControl';
 import { api } from '../../services/api';
@@ -48,14 +47,6 @@ export function CatalogPage() {
       <ErrorNotice error={products.error} retry={products.refresh} />
       <ErrorNotice error={error} retry={() => void refresh()} />
       <ErrorNotice error={actionError} />
-      {cart?.activeOrderId && (
-        <Notice>
-          Your items are held for an open checkout.{' '}
-          <Link to={'/orders/' + cart.activeOrderId + '/payment'}>
-            Continue payment <Arrow />
-          </Link>
-        </Notice>
-      )}
       <div className="catalog-layout">
         <section aria-label="Product collection">
           <div className="section-title">
@@ -68,7 +59,7 @@ export function CatalogPage() {
           <div className="product-grid">
             {products.data?.map((product) => {
               const quantity = cart?.items.find((item) => item.sku === product.sku)?.quantity ?? 0;
-              const disabled = loading || updating || !cart || !!cart.activeOrderId;
+              const disabled = loading || updating || !cart;
               return (
                 <article className="product-card" key={product.sku}>
                   <div className="product-image-wrap">
@@ -158,11 +149,8 @@ export function CatalogPage() {
             </div>
           </dl>
           {itemCount > 0 ? (
-            <Link
-              className="button button-dark"
-              to={cart?.activeOrderId ? '/orders/' + cart.activeOrderId + '/payment' : '/cart'}
-            >
-              {cart?.activeOrderId ? 'Resume payment' : 'Review cart'}
+            <Link className="button button-dark" to="/cart">
+              Review cart
               <Arrow />
             </Link>
           ) : (

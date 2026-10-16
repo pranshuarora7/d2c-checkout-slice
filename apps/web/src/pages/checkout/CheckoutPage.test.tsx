@@ -27,7 +27,6 @@ beforeEach(() => {
     handling: 29,
     total: 1328,
     currency: 'INR',
-    activeOrderId: null,
   });
   vi.spyOn(api, 'profile').mockResolvedValue({
     name: 'Demo Shopper',
@@ -193,12 +192,12 @@ it('keeps the shopper out of payment when another buyer reserves the last item',
   await screen.findByText('Review saved cart');
 });
 
-it('offers the existing payment even if cart refresh is unavailable after a lost checkout response', async () => {
+it('recovers the saved order after a lost response and address change even if refresh fails', async () => {
   const checkout = vi
     .spyOn(api, 'checkout')
     .mockRejectedValueOnce(new ApiError('NETWORK_ERROR', 'The response was lost. Please retry.'))
     .mockRejectedValueOnce(
-      new ApiError('ACTIVE_ORDER', 'You already have a checkout awaiting payment.', {
+      new ApiError('RETRY_KEY_REUSED', 'You already have a checkout awaiting payment.', {
         orderId: 'KIN-recovered',
       }),
     );
@@ -218,9 +217,9 @@ it('offers the existing payment even if cart refresh is unavailable after a lost
   await user.click(screen.getByRole('radio', { name: /Work/ }));
   vi.mocked(api.cart).mockRejectedValue(new ApiError('NETWORK_ERROR', 'Cart refresh unavailable'));
   await user.click(screen.getByRole('button', { name: /Continue to payment/ }));
-  expect(checkout.mock.calls[0][1]).not.toBe(checkout.mock.calls[1][1]);
-  expect((await screen.findByRole('link', { name: /Resume payment/ })).getAttribute('href')).toBe(
-    '/orders/KIN-recovered/payment',
+  expect(checkout.mock.calls[0][1]).toBe(checkout.mock.calls[1][1]);
+  expect((await screen.findByRole('link', { name: /View saved order/ })).getAttribute('href')).toBe(
+    '/orders/KIN-recovered',
   );
   expect(screen.queryByRole('button', { name: /Continue to payment/ })).toBeNull();
   expect(api.cart).toHaveBeenCalledTimes(2);
@@ -228,7 +227,7 @@ it('offers the existing payment even if cart refresh is unavailable after a lost
 
 it('refreshes cart state when checkout reports an existing order', async () => {
   vi.spyOn(api, 'checkout').mockRejectedValue(
-    new ApiError('ACTIVE_ORDER', 'Checkout already exists.', { orderId: 'KIN-existing' }),
+    new ApiError('RETRY_KEY_REUSED', 'Checkout already exists.', { orderId: 'KIN-existing' }),
   );
   render(
     <MemoryRouter>
@@ -241,10 +240,16 @@ it('refreshes cart state when checkout reports an existing order', async () => {
   );
   await screen.findByText('Demo Shopper');
   const saved = await api.cart();
-  vi.mocked(api.cart).mockResolvedValue({ ...saved, activeOrderId: 'KIN-existing' });
+  vi.mocked(api.cart).mockResolvedValue({
+    ...saved,
+    items: [],
+    subtotal: 0,
+    handling: 0,
+    total: 0,
+  });
   await userEvent.setup().click(screen.getByRole('button', { name: /Continue to payment/ }));
-  expect((await screen.findByRole('link', { name: /Resume payment/ })).getAttribute('href')).toBe(
-    '/orders/KIN-existing/payment',
+  expect((await screen.findByRole('link', { name: /View saved order/ })).getAttribute('href')).toBe(
+    '/orders/KIN-existing',
   );
   expect(screen.queryByRole('button', { name: /Continue to payment/ })).toBeNull();
   expect(screen.queryByRole('alert')).toBeNull();

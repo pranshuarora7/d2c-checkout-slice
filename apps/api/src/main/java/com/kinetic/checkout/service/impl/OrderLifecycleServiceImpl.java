@@ -1,7 +1,6 @@
 package com.kinetic.checkout.service.impl;
 
 import com.kinetic.checkout.model.Order;
-import com.kinetic.checkout.repository.CartRepository;
 import com.kinetic.checkout.repository.CatalogRepository;
 import com.kinetic.checkout.repository.OrderRepository;
 import com.kinetic.checkout.service.OrderLifecycleService;
@@ -16,14 +15,12 @@ import java.time.Clock;
 public class OrderLifecycleServiceImpl implements OrderLifecycleService {
     private final OrderRepository orders;
     private final CatalogRepository products;
-    private final CartRepository carts;
     private final Clock clock;
 
     public OrderLifecycleServiceImpl(
-            OrderRepository orders, CatalogRepository products, CartRepository carts, Clock clock) {
+            OrderRepository orders, CatalogRepository products, Clock clock) {
         this.orders = orders;
         this.products = products;
-        this.carts = carts;
         this.clock = clock;
     }
 
@@ -42,7 +39,7 @@ public class OrderLifecycleServiceImpl implements OrderLifecycleService {
         if (order.status() != Order.Status.PENDING) return;
         // Stock was deducted when reserved. Confirmation consumes that hold, not stock again.
         orders.transition(order.id(), Order.Status.CONFIRMED, clock.instant());
-        carts.clear(order.userId());
+        // A callback belongs to this order and must never change the shopper's new cart.
     }
 
     @Override

@@ -22,10 +22,5 @@ public final class CartDtos {
             double lineTotal) {}
 
     public record Cart(
-            List<Item> items,
-            double subtotal,
-            double handling,
-            double total,
-            String currency,
-            String activeOrderId) {}
+            List<Item> items, double subtotal, double handling, double total, String currency) {}
 }
